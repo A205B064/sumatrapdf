@@ -737,6 +737,15 @@ const globalPrefs: Field[] = [
   mkField("SidebarDx", Int, 0, "width of favorites/bookmarks sidebar (if shown)"),
   setVersion(
     mkField(
+      "SidebarPushContentMode",
+      Str,
+      "always",
+      "controls whether opening the left sidebar (bookmarks/favorites) pushes the document content aside so the sidebar doesn't cover it: always (always push the content aside to make room for the sidebar, the current default), auto (push the content aside only when needed - the sidebar first overlaps the empty margin beside the page, and pushes the content only if that margin isn't wide enough), never (never push the content aside; the sidebar overlaps the page and may cover content)",
+    ),
+    "3.7",
+  ),
+  setVersion(
+    mkField(
       "Scrollbars",
       Str,
       "windows",

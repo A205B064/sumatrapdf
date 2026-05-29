@@ -1018,6 +1018,16 @@ int ScrollbarModeFromPrefs() {
     return idx;
 }
 
+SeqStrings gSidebarPushContentModeNames = "always\0auto\0never\0";
+
+int SidebarPushContentModeFromPrefs() {
+    int idx = seqstrings::StrToIdxIS(gSidebarPushContentModeNames, gGlobalPrefs->sidebarPushContentMode);
+    if (idx < 0) {
+        idx = kSidebarPushAlways;
+    }
+    return idx;
+}
+
 bool ScrollbarsAreHidden() {
     return ScrollbarModeFromPrefs() == kScrollbarHidden;
 }
@@ -1764,6 +1774,9 @@ static void CreateSidebar(MainWindow* win) {
         win->sidebarSplitter = new Splitter();
         win->sidebarSplitter->onMove = MkFunc1Void(OnSidebarSplitterMove);
         win->sidebarSplitter->Create(args);
+        // needed so that the canvas doesn't paint over the splitter when the
+        // sidebar overlaps the canvas (SidebarPushContentMode = auto / never)
+        SetWindowStyle(win->sidebarSplitter->hwnd, WS_CLIPSIBLINGS, true);
     }
 
     CreateToc(win);
@@ -1775,6 +1788,7 @@ static void CreateSidebar(MainWindow* win) {
         win->favSplitter = new Splitter();
         win->favSplitter->onMove = MkFunc1Void(OnFavSplitterMove);
         win->favSplitter->Create(args);
+        SetWindowStyle(win->favSplitter->hwnd, WS_CLIPSIBLINGS, true);
     }
 
     CreateFavorites(win);
@@ -1835,7 +1849,7 @@ static MainWindow* CreateMainWindow() {
     // screen's edge when maximized (cf. Fitts' law) and there are
     // no additional adjustments needed when (un)maximizing
     clsName = CANVAS_CLASS_NAME;
-    style = WS_CHILD | WS_CLIPCHILDREN;
+    style = WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     if (!ScrollbarsAreHidden() && !ScrollbarsUseOverlay()) {
         style |= WS_HSCROLL | WS_VSCROLL;
     }
@@ -4238,11 +4252,76 @@ constexpr int kFrameBorderSize = 1;
 
 using LayoutState = MainWindow::LayoutState;
 
+// Returns the number of horizontal pixels of empty space that would exist on the
+// left of the canvas if it spanned the full available width `availDx` (i.e. the
+// sidebar overlaid the canvas instead of shrinking it). Used by SidebarPushContentMode
+// auto to decide whether the sidebar can float over empty space. Returns 0 when no
+// document is loaded.
+//
+// The margin is derived from the page content width (which depends only on zoom,
+// not on the current canvas size) and then re-centered for `availDx`, rather than
+// reading the live page position. This keeps the result stable regardless of how
+// wide the canvas currently is, so the auto decision is correct even when
+// RelayoutFrame() runs before the canvas has reached its final size:
+//  - We can't use FirstVisiblePageNo() because visibleRatio is only populated by
+//    RecalcVisibleParts(), which hasn't run yet when RelayoutFrame() is called
+//    during document load (Relayout() sets page positions but not visibility).
+//  - We can't use the live pos.x either: during session restore the document is
+//    loaded while the window is hidden and only later shown/maximized, so pos.x
+//    reflects a stale (smaller/shrunk) canvas and auto would fall back to always.
+// Horizontal extent (in pixels) of the laid-out page content. Depends only on the
+// zoom, not on the current canvas width: the centering offset is common to all
+// pages so it cancels out in (maxRight - minLeft). Returns 0 when no document is
+// loaded or no page has been laid out yet.
+static int ContentWidthPx(MainWindow* win) {
+    if (!win) {
+        return 0;
+    }
+    DisplayModel* dm = win->AsFixed();
+    if (!dm || !dm->pagesInfo) {
+        return 0;
+    }
+    int pageCount = dm->PageCount();
+    int minLeft = 0, maxRight = 0;
+    bool found = false;
+    for (int pageNo = 1; pageNo <= pageCount; ++pageNo) {
+        PageInfo* pi = dm->GetPageInfo(pageNo);
+        if (!pi || !pi->isShown) {
+            continue;
+        }
+        int l = pi->pos.x;
+        int r = pi->pos.x + pi->pos.dx;
+        if (!found) {
+            minLeft = l;
+            maxRight = r;
+            found = true;
+        } else {
+            minLeft = std::min(minLeft, l);
+            maxRight = std::max(maxRight, r);
+        }
+    }
+    if (!found) {
+        return 0;
+    }
+    return maxRight - minLeft;
+}
+
+static int LeftEmptyMarginPx(MainWindow* win, int availDx) {
+    int contentDx = ContentWidthPx(win);
+    if (contentDx <= 0 || contentDx >= availDx) {
+        // no document, or content fills (overflows) the full width: no empty margin
+        return 0;
+    }
+    // content narrower than the canvas is centered, so half the slack is on the left
+    return (availDx - contentDx) / 2;
+}
+
 static bool IsLayoutStateEq(LayoutState* s1, LayoutState* s2) {
     return s1->rc == s2->rc && s1->presentation == s2->presentation && s1->tabsInTitlebar == s2->tabsInTitlebar &&
            s1->isFullScreen == s2->isFullScreen && s1->tabsVisible == s2->tabsVisible &&
            s1->isToolbarVisible == s2->isToolbarVisible && s1->tocVisible == s2->tocVisible &&
-           s1->showFavorites == s2->showFavorites && s1->showMenuBarRebar == s2->showMenuBarRebar;
+           s1->showFavorites == s2->showFavorites && s1->showMenuBarRebar == s2->showMenuBarRebar &&
+           s1->contentDx == s2->contentDx;
 }
 
 static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
@@ -4262,6 +4341,13 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
     curState.tocVisible = win->tocVisible;
     curState.showFavorites = gGlobalPrefs->showFavorites;
     curState.showMenuBarRebar = IsShowingMenuBarRebar(win);
+    // in auto push-content mode the amount pushed depends on the page content width, so
+    // track it: a content-width change (e.g. canvas reaching its final size after a
+    // maximized session restore, or a zoom change) must re-trigger the relayout even
+    // when nothing else changed. 0 in other modes so they don't relayout on zoom.
+    if (SidebarPushContentModeFromPrefs() == kSidebarPushAuto) {
+        curState.contentDx = ContentWidthPx(win);
+    }
 
     // skip redundant relayouts when all layout-affecting state is unchanged
     if (IsLayoutStateEq(&curState, &win->lastLayoutState) && updateToolbars && sidebarDx == -1) {
@@ -4406,24 +4492,49 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
             toc.dy = limitValue(toc.dy, kTocMinDy, rc.dy - kTocMinDy);
         }
 
+        // sidebar push-content mode: how much of the canvas to give up for the sidebar
+        // (i.e. how far the document content is pushed aside)
+        // - always: push content aside by the full sidebar width (legacy behavior)
+        // - never:  don't push; sidebar overlays the canvas's left portion
+        // - auto:   push only by what's needed beyond the page's empty left margin
+        int sidebarWidth = toc.dx + kSplitterDx;
+        int pushMode = SidebarPushContentModeFromPrefs();
+        int shrinkPx = sidebarWidth;
+        if (pushMode == kSidebarPushNever) {
+            shrinkPx = 0;
+        } else if (pushMode == kSidebarPushAuto) {
+            // rc.dx here is the full width available to canvas + sidebar (the
+            // sidebar shrink below hasn't been applied yet)
+            int empty = LeftEmptyMarginPx(win, rc.dx);
+            shrinkPx = std::max(0, sidebarWidth - empty);
+        }
+        int sidebarX = rc.x;
+
+        // In overlap modes the sidebar must paint on top of the canvas;
+        // place sidebar windows at HWND_TOP so they aren't covered.
+        bool sidebarOverlaps = shrinkPx < sidebarWidth;
+        uint zorderFlags = SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+        HWND insertAfter = sidebarOverlaps ? HWND_TOP : nullptr;
+        if (!sidebarOverlaps) {
+            zorderFlags |= SWP_NOZORDER;
+        }
+
         if (tocVisible) {
-            Rect rToc(rc.TL(), toc);
-            dh.MoveWindow(win->hwndTocBox, rToc);
+            dh.SetWindowPos(win->hwndTocBox, insertAfter, sidebarX, rc.y, toc.dx, toc.dy, zorderFlags);
             if (favVisible) {
-                Rect rSplitV(rc.x, rc.y + toc.dy, toc.dx, kSplitterDy);
-                dh.MoveWindow(win->favSplitter->hwnd, rSplitV);
+                dh.SetWindowPos(win->favSplitter->hwnd, insertAfter, sidebarX, rc.y + toc.dy, toc.dx, kSplitterDy,
+                                zorderFlags);
                 toc.dy += kSplitterDy;
             }
         }
         if (favVisible) {
-            Rect rFav(rc.x, rc.y + toc.dy, toc.dx, rc.dy - toc.dy);
-            dh.MoveWindow(win->hwndFavBox, rFav);
+            dh.SetWindowPos(win->hwndFavBox, insertAfter, sidebarX, rc.y + toc.dy, toc.dx, rc.dy - toc.dy, zorderFlags);
         }
-        Rect rSplitH(rc.x + toc.dx, rc.y, kSplitterDx, rc.dy);
-        dh.MoveWindow(win->sidebarSplitter->hwnd, rSplitH);
+        dh.SetWindowPos(win->sidebarSplitter->hwnd, insertAfter, sidebarX + toc.dx, rc.y, kSplitterDx, rc.dy,
+                        zorderFlags);
 
-        rc.x += toc.dx + kSplitterDx;
-        rc.dx -= toc.dx + kSplitterDx;
+        rc.x += shrinkPx;
+        rc.dx -= shrinkPx;
     }
 
     dh.MoveWindow(win->hwndCanvas, rc);
@@ -4863,6 +4974,12 @@ void SmartZoom(MainWindow* win, float newZoom, Point* suggestedPoint, bool smart
     win->ctrl->SetZoomVirtual(newZoom, pt);
     UpdateToolbarState(win);
     ShowZoomNotification(win, newZoom);
+
+    // re-evaluate the sidebar push-content layout: in auto mode how much the
+    // content is pushed depends on the (now zoomed) page width, so a zoom change
+    // can flip whether the sidebar overlaps the empty margin or pushes the content.
+    // RelayoutFrame's contentDx guard makes this a no-op in always/never modes.
+    RelayoutFrame(win);
 }
 
 /* Zoom document in window 'hwnd' to zoom level 'zoom'.

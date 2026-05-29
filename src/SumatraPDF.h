@@ -146,6 +146,14 @@ constexpr int kScrollbarHidden = 3;
 extern SeqStrings gScrollbarModeNames;
 int ScrollbarModeFromPrefs();
 
+// sidebar push-content mode values: "always\0auto\0never\0"
+// (whether opening the sidebar pushes the document content aside)
+constexpr int kSidebarPushAlways = 0;
+constexpr int kSidebarPushAuto = 1;
+constexpr int kSidebarPushNever = 2;
+extern SeqStrings gSidebarPushContentModeNames;
+int SidebarPushContentModeFromPrefs();
+
 bool ScrollbarsAreHidden();
 bool ScrollbarsUseOverlay();
 OverlayScrollbar::Mode ScrollbarsOverlayMode();

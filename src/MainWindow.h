@@ -245,6 +245,11 @@ struct MainWindow {
         bool tocVisible = false;
         bool showFavorites = false;
         bool showMenuBarRebar = false;
+        // horizontal extent of laid-out page content; only tracked in SidebarPushContentMode
+        // auto (0 otherwise) so a change in content width re-triggers the auto push-content
+        // calc even when no other layout state changed (e.g. the canvas reaching its
+        // final size after a maximized session restore)
+        int contentDx = 0;
     };
     LayoutState lastLayoutState;
 

@@ -129,6 +129,15 @@ ShowStartPage = true
 ; width of favorites/bookmarks sidebar (if shown)
 SidebarDx = 0
 
+; controls whether opening the left sidebar (bookmarks/favorites) pushes the
+; document content aside so the sidebar doesn't cover it: always (always push
+; the content aside to make room for the sidebar, the current default), auto
+; (push the content aside only when needed - the sidebar first overlaps the
+; empty margin beside the page, and pushes the content only if that margin isn't
+; wide enough), never (never push the content aside; the sidebar overlaps the
+; page and may cover content) (introduced in version 3.7)
+SidebarPushContentMode = always
+
 ; scrollbar mode: windows (standard Windows scrollbar), smart (overlay scrollbar
 ; with auto-hide), overlay (always visible overlay scrollbar), hidden (no
 ; scrollbars) (introduced in version 3.7)

@@ -885,7 +885,7 @@ extern void TocTreeKeyDown2(TreeView::KeyDownEvent*);
 void CreateFavorites(MainWindow* win) {
     HMODULE h = GetModuleHandleW(nullptr);
     int dx = gGlobalPrefs->sidebarDx;
-    DWORD dwStyle = WS_CHILD | WS_CLIPCHILDREN;
+    DWORD dwStyle = WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     win->hwndFavBox = CreateWindowW(WC_STATIC, L"", dwStyle, 0, 0, dx, 0, win->hwndFrame, (HMENU) nullptr, h, nullptr);
 
     auto l = new LabelWithCloseWnd();
