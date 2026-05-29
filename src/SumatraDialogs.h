@@ -9,6 +9,7 @@ char* Dialog_GetPassword(HWND hwnd, const char* fileName, bool* rememberPassword
 const char* Dialog_ChangeLanguge(HWND hwnd, const char* currLangCode);
 bool Dialog_CustomZoom(HWND hwnd, bool forChm, float* currZoomInOut);
 bool Dialog_ChangeScrollbar(HWND hwnd);
+bool Dialog_ChangeSidebarPushMode(HWND hwnd);
 INT_PTR Dialog_Settings(HWND hwnd, GlobalPrefs* prefs);
 bool Dialog_AddFavorite(HWND hwnd, const char* pageNo, AutoFreeStr& favName);
 

@@ -99,6 +99,7 @@ static i32 gDocumentNotOpenWhitelist[] = {
     CmdDebugTogglePredictiveRender,
     CmdDebugToggleRtl,
     CmdChangeScrollbar,
+    CmdChangeSidebarPushMode,
     CmdToggleAntiAlias,
     CmdToggleSmoothScroll,
     CmdToggleScrollbarInSinglePage,

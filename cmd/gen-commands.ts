@@ -230,6 +230,7 @@ export const commands = [
     "CmdReadAloud", "Read Aloud",
     "CmdPauseReadAloud", "Pause Read Aloud",
     "CmdContinueReadAloud", "Continue Read Aloud",
+    "CmdChangeSidebarPushMode", "Change Sidebar Push Mode",
     "CmdNone", "Do nothing",
 ];
 

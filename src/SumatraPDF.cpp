@@ -4760,6 +4760,14 @@ static void OnMenuChangeScrollbar(HWND hwnd) {
     }
 }
 
+static void OnMenuChangeSidebarPushMode(HWND hwnd) {
+    if (Dialog_ChangeSidebarPushMode(hwnd)) {
+        for (MainWindow* w : gWindows) {
+            RelayoutFrame(w);
+        }
+    }
+}
+
 #if 0 // note: was used in OpenAdvancedOptions()
 static void OpenFileWithTextEditor(const char* path) {
     Vec<TextEditor*> editors;
@@ -6846,6 +6854,10 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
 
         case CmdChangeScrollbar:
             OnMenuChangeScrollbar(win->hwndFrame);
+            break;
+
+        case CmdChangeSidebarPushMode:
+            OnMenuChangeSidebarPushMode(win->hwndFrame);
             break;
 
         case CmdChangeBackgroundColor:

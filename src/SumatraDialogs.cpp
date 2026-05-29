@@ -789,6 +789,53 @@ bool Dialog_ChangeScrollbar(HWND hwnd) {
     return res == IDOK;
 }
 
+static INT_PTR CALLBACK Dialog_ChangeSidebarPushMode_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARAM) {
+    switch (msg) {
+        case WM_INITDIALOG: {
+            if (UseDarkModeLib()) {
+                DarkMode::setDarkWndSafe(hDlg);
+            }
+            const char* s = gGlobalPrefs->sidebarPushContentMode;
+            int checkId = IDC_SIDEBAR_PUSH_ALWAYS;
+            if (str::EqI(s, "auto")) {
+                checkId = IDC_SIDEBAR_PUSH_AUTO;
+            } else if (str::EqI(s, "never")) {
+                checkId = IDC_SIDEBAR_PUSH_NEVER;
+            }
+            CheckRadioButton(hDlg, IDC_SIDEBAR_PUSH_ALWAYS, IDC_SIDEBAR_PUSH_NEVER, checkId);
+            HwndSetText(hDlg, _TRA("Change Sidebar Push Mode"));
+            HwndSetDlgItemText(hDlg, IDOK, _TRA("OK"));
+            HwndSetDlgItemText(hDlg, IDCANCEL, _TRA("Cancel"));
+            CenterDialog(hDlg);
+            return TRUE;
+        }
+        case WM_COMMAND:
+            switch (LOWORD(wp)) {
+                case IDOK: {
+                    const char* val = "always";
+                    if (IsDlgButtonChecked(hDlg, IDC_SIDEBAR_PUSH_AUTO) == BST_CHECKED) {
+                        val = "auto";
+                    } else if (IsDlgButtonChecked(hDlg, IDC_SIDEBAR_PUSH_NEVER) == BST_CHECKED) {
+                        val = "never";
+                    }
+                    str::ReplaceWithCopy(&gGlobalPrefs->sidebarPushContentMode, val);
+                    EndDialog(hDlg, IDOK);
+                    return TRUE;
+                }
+                case IDCANCEL:
+                    EndDialog(hDlg, IDCANCEL);
+                    return TRUE;
+            }
+            break;
+    }
+    return FALSE;
+}
+
+bool Dialog_ChangeSidebarPushMode(HWND hwnd) {
+    INT_PTR res = CreateDialogBox(IDD_DIALOG_CHANGE_SIDEBAR_PUSH_MODE, hwnd, Dialog_ChangeSidebarPushMode_Proc, 0);
+    return res == IDOK;
+}
+
 static void RemoveDialogItem(HWND hDlg, int itemId, int prevId = 0) {
     HWND hItem = GetDlgItem(hDlg, itemId);
     Rect itemRc = MapRectToWindow(WindowRect(hItem), HWND_DESKTOP, hDlg);
